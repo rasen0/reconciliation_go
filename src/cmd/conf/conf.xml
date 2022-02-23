@@ -1,0 +1,6 @@
+
+<config>
+	<logpath>conf/log</logpath>
+	<logprefix>log_</logprefix>
+	<excelfile>核对账.xlsx</excelfile>
+</config>
