@@ -3,7 +3,6 @@ package handle
 import (
 	"financial/m/v1/src/entity"
 	"financial/m/v1/src/log"
-	"financial/m/v1/src/util"
 	"fmt"
 	"strconv"
 	"strings"
@@ -30,7 +29,9 @@ func NewReconciliation() *Reconciliation {
 }
 
 func (r *Reconciliation) ReadData() {
-	for ri := 1; ri < r.RowNum; ri++ {
+	log.Debugf("colnum:%d.  rownum:%d", r.ColNum, r.RowNum)
+	// deduction := 1
+	for ri := 1; ri <= r.RowNum; ri++ {
 		cell1, _ := r.EFile.GetCellValue(r.SheetName, locationCol["1"]+fmt.Sprint(ri))
 		cell2, _ := r.EFile.GetCellValue(r.SheetName, locationCol["2"]+fmt.Sprint(ri))
 		cell3, _ := r.EFile.GetCellValue(r.SheetName, locationCol["3"]+fmt.Sprint(ri))
@@ -38,54 +39,73 @@ func (r *Reconciliation) ReadData() {
 		cell5, _ := r.EFile.GetCellValue(r.SheetName, locationCol["5"]+fmt.Sprint(ri))
 		cell6, _ := r.EFile.GetCellValue(r.SheetName, locationCol["6"]+fmt.Sprint(ri))
 		cell7, _ := r.EFile.GetCellValue(r.SheetName, locationCol["7"]+fmt.Sprint(ri))
-		if cell5 == "摘要" || cell5 == "" {
-			continue
-		}
-		voucherNum, err0 := strconv.Atoi(cell4)
-		debit, err1 := strconv.ParseInt(cell6, 10, 64)
-		credit, err2 := strconv.ParseInt(cell7, 10, 64)
+		// if cell5 == "摘要" || cell5 == "" {
+		// 	deduction++
+		// 	continue
+		// }
+		// voucherNum, err0 := strconv.Atoi(cell4)
+		debit, err1 := strconv.ParseFloat(cell6, 32)
+		credit, err2 := strconv.ParseFloat(cell7, 32)
 
-		log.Debugf("row： |%s|  |%s|  |%s| |%s|  |%s|  |%s|  |%s|\n", cell1, cell2, cell3, cell4, cell5, cell6, cell7)
-		if err0 != nil && err1 != nil && err2 != nil {
-			continue
-		}
-
-		// companyName := obtainName(cell5)
-		companyName, err := util.RegexpParentheses(cell5)
-		if err != nil {
-			log.Errorf("RegexpParentheses error %v\n", err)
-		}
-		log.Debugf("name:%s\n", companyName)
-		if index, ok := r.ReconMap[companyName]; !ok {
-			index = len(r.CompanyList)
-			r.ReconMap[companyName] = index
-			r.CompanyList = append(r.CompanyList, entity.ReconciliationStat{
-				Name:    companyName,
-				RowIdxs: []int{ri - 2},
-			})
-		} else {
-			reconciliationStat := r.CompanyList[index]
-			reconciliationStat.RowIdxs = append(reconciliationStat.RowIdxs, ri-2)
-			r.CompanyList[index] = reconciliationStat
-		}
+		log.Debugf("row： |%s|  |%s|  |%s| |%s|  |%s|  |%s|  |%s|.debit:%f. credit:%f\n", cell1, cell2, cell3, cell4, cell5, cell6, cell7, debit, credit)
 		r.RowDataList = append(r.RowDataList, entity.ReconciliationData{
 			Year:       cell1,
 			Month:      cell2,
 			Day:        cell3,
-			VoucherNum: voucherNum,
+			VoucherNum: cell4,
 			Abstract:   cell5,
 			Debit:      debit,
 			Credit:     credit,
 		})
-	}
+		if err1 != nil && err2 != nil {
+			// deduction++
+			continue
+		}
+		if debit == 0 && credit == 0 && cell5 == "" {
+			// deduction++
+			continue
+		}
 
+		companyName := obtainName(cell5)
+		if companyName == "" {
+			log.Debugf("name is less %v\n", cell5)
+			continue
+		}
+		// companyName, err := util.RegexpParentheses(cell5)
+		// if err != nil {
+		// 	log.Errorf("RegexpParentheses error %v\n", err)
+		// }
+		log.Debugf("name:%s\n", companyName)
+		listIdx := ri
+		if index, ok := r.ReconMap[companyName]; !ok {
+			index = len(r.CompanyList)
+			r.ReconMap[companyName] = index
+			log.Debugf("name:%s. index:%d. rownum = %d\n", companyName, index, listIdx)
+			r.CompanyList = append(r.CompanyList, entity.ReconciliationStat{
+				Name:    companyName,
+				RowIdxs: []int{listIdx},
+			})
+		} else {
+			reconciliationStat := r.CompanyList[index]
+			log.Debugf("name:%s. index:%d. rownum = %d\n", companyName, index, listIdx)
+			reconciliationStat.RowIdxs = append(reconciliationStat.RowIdxs, listIdx)
+			r.CompanyList[index] = reconciliationStat
+		}
+	}
+	log.Debugf("RowDataList len:%d.", len(r.RowDataList))
+	log.Debug("=============================")
 }
 
 func (r *Reconciliation) Match() {
 	for n, companyVal := range r.CompanyList {
 		for _, rowIdx := range companyVal.RowIdxs {
+			// if strings.Contains(companyVal.Name, "中国农业银行股份有限公司郴州分行") {
+			// 	fmt.Println()
+			// }
 			// 对比借贷
-			companyVal.Remain += r.RowDataList[rowIdx].Debit - r.RowDataList[rowIdx].Credit
+			log.Debugf("name:%s. rowIdx:%d", companyVal.Name, rowIdx)
+			log.Debugf("name:%s.  remain:%f.  debit:%f.   Credit:%f", companyVal.Name, companyVal.Remain, r.RowDataList[rowIdx-1].Debit, r.RowDataList[rowIdx-1].Credit)
+			companyVal.Remain += r.RowDataList[rowIdx-1].Debit - r.RowDataList[rowIdx-1].Credit
 		}
 		if companyVal.Remain == 0 {
 			r.CompanyList[n].State = entity.ZeroState
@@ -95,6 +115,7 @@ func (r *Reconciliation) Match() {
 			log.Debugf("company:%s, state:%d, \n", companyVal.Name, companyVal.State)
 		}
 	}
+	log.Debug("========================")
 }
 
 // func (r *Reconciliation) showResult() {
@@ -116,15 +137,31 @@ func obtainName(str string) string {
 	if len(str) < 3 {
 		return ""
 	}
+	var leftIdx int
 	idxFirst := strings.Index(str, "（")
-	if idxFirst < 0 {
+	if idxFirst >= 0 {
+		leftIdx = idxFirst + 3
+	}
+	idxFirst2 := strings.Index(str, "(")
+	if idxFirst < 0 || (leftIdx >= 0 && idxFirst2 >= 0 && idxFirst2 < idxFirst) {
+		leftIdx = idxFirst2 + 1
+	}
+	if leftIdx < 0 {
 		return ""
 	}
-	idxSecond := strings.Index(str, "）")
-	if idxSecond < 0 {
+	var right int
+	idxSecond := strings.LastIndex(str, "）")
+	if idxSecond > 0 {
+		right = idxSecond
+	}
+	idxSecond2 := strings.LastIndex(str, ")")
+	if idxSecond2 > 0 && idxSecond2 > right {
+		right = idxSecond2
+	}
+	if right < 0 {
 		return ""
 	}
-	return str[idxFirst+len("（") : idxSecond]
+	return str[leftIdx:right]
 }
 
 // func (r *Reconciliation) ReadData(rawData [][]string) {

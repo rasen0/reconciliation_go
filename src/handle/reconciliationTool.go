@@ -41,7 +41,7 @@ func (r *reconciliationTool) Color() {
 			if companyStat.State != 1 {
 				continue
 			}
-			rowIdx := fmt.Sprintf("%d", tmpIdx+2)
+			rowIdx := fmt.Sprintf("%d", tmpIdx)
 			style, err := r.excelData.EFile.NewStyle(`{"fill":{"type":"gradient","color":["#7FFFAA","#7FFFAA"],"shading":1}}`)
 			if err != nil {
 				log.Errorf("colos:%s\n", err)
