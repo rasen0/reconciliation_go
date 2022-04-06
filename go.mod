@@ -1,6 +1,6 @@
 module financial/m/v1
 
-go 1.17
+go 1.18
 
 require (
 	github.com/xuri/excelize/v2 v2.5.0
